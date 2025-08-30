@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "datagit"
+version = "0.1.0"
+description = "Git-like version control for datasets"
+authors = [{ name = "Rugved" }]
+dependencies = [
+    "typer",
+    "rich"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+datagit = "datagit.cli.main:main"
