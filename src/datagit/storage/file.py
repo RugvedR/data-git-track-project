@@ -1,0 +1,43 @@
+import hashlib
+import shutil
+import json
+from pathlib import Path
+
+def hash_file(file_path: Path) -> str:
+    """
+    Compute SHA-256 hash of a file.
+    """
+    h = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+def save_object(file_path: Path, file_hash: str, repo_path: Path):
+    """
+    Save a file into the .datagit/objects/ store using its hash.
+    """
+    objects_dir = repo_path / "objects"
+    objects_dir.mkdir(parents=True, exist_ok=True)
+
+    dest = objects_dir / file_hash
+    if not dest.exists():
+        shutil.copy(file_path, dest)
+
+    return dest
+
+def load_index(repo_path: Path) -> dict:
+    """
+    Load the staging index.json file.
+    """
+    index_path = repo_path / "index.json"
+    if index_path.exists():
+        return json.loads(index_path.read_text())
+    return {}
+
+def save_index(repo_path: Path, index: dict):
+    """
+    Save the staging index.json file.
+    """
+    index_path = repo_path / "index.json"
+    index_path.write_text(json.dumps(index, indent=2))

@@ -2,6 +2,7 @@
 import typer
 from pathlib import Path
 import os
+import json
 from rich.console import Console
 
 console = Console()
@@ -21,6 +22,12 @@ def init_command():
     # Create repo structure
     os.makedirs(repo_path / "objects", exist_ok=True)
     os.makedirs(repo_path / "commits", exist_ok=True)
-    (repo_path / "metadata.json").write_text("[]")
+
+    metadata = {
+        "HEAD": None,
+        "branch": "main",
+        "commits": []
+    }
+    (repo_path / "metadata.json").write_text(json.dumps(metadata, indent=2))
 
     console.print("[green]Initialized empty DataGit repository in .datagit/[/green]")

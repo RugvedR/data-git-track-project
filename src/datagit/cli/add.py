@@ -1,9 +1,7 @@
-# src/datagit/cli/add.py
 import typer
 from pathlib import Path
-import os
-import shutil
 from rich.console import Console
+from datagit.storage import file as storage
 
 console = Console()
 app = typer.Typer()
@@ -19,16 +17,18 @@ def add_command(file: str = typer.Argument(..., help="File to add to staging are
         console.print("[red]No DataGit repository found. Run 'datagit init' first.[/red]")
         raise typer.Exit(1)
 
-    staging_path = repo_path / "staging"
-    staging_path.mkdir(exist_ok=True)
-
     file_path = Path(file)
     if not file_path.exists():
         console.print(f"[red]File not found: {file}[/red]")
         raise typer.Exit(1)
 
-    # Copy file into staging area
-    dest = staging_path / file_path.name
-    shutil.copy(file_path, dest)
+    # Compute hash + save object
+    file_hash = storage.hash_file(file_path)
+    storage.save_object(file_path, file_hash, repo_path)
 
-    console.print(f"[green]Added {file} to staging area.[/green]")
+    # Load and update index
+    index = storage.load_index(repo_path)
+    index[str(file_path)] = file_hash
+    storage.save_index(repo_path, index)
+
+    console.print(f"[green]Staged {file} ({file_hash[:8]})[/green]")
