@@ -1,3 +1,4 @@
+# src/datagit/cli/commit.py
 import typer
 from pathlib import Path
 import json
@@ -35,6 +36,19 @@ def commit_command(
     else:
         metadata = {"HEAD": None, "branch": "main", "commits": []}
 
+    commits_dir.mkdir(exist_ok=True)
+
+    # --- Check if changes exist compared to last commit ---
+    if metadata["HEAD"]:
+        head_commit_file = commits_dir / f"{metadata['HEAD']}.json"
+        if head_commit_file.exists():
+            head_commit = json.loads(head_commit_file.read_text())
+            last_snapshot = head_commit.get("files", {})
+
+            if last_snapshot == index:
+                console.print("[green]Nothing to commit, working tree clean.[/green]")
+                return
+
     # Generate commit ID
     commit_id = str(len(metadata["commits"]) + 1).zfill(4)  # e.g., "0001"
 
@@ -43,11 +57,10 @@ def commit_command(
         "message": message,
         "files": index.copy(),  # snapshot of staged files
         "parent": metadata["HEAD"],
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.utcnow().isoformat() + "Z",
     }
 
     # Save commit file
-    commits_dir.mkdir(exist_ok=True)
     commit_file = commits_dir / f"{commit_id}.json"
     commit_file.write_text(json.dumps(commit_data, indent=2))
 
