@@ -19,7 +19,6 @@ def load_metadata(repo_path: Path) -> dict:
         return {}
     return json.loads(metadata_path.read_text())
 
-
 def load_commit(repo_path: Path, commit_id: str) -> Optional[dict]:
     """
     Load a specific commit file by commit_id.
@@ -28,7 +27,6 @@ def load_commit(repo_path: Path, commit_id: str) -> Optional[dict]:
     if not commit_file.exists():
         return None
     return json.loads(commit_file.read_text())
-
 
 @app.command("log")
 def log_command():

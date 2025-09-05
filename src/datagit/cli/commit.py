@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 from rich.console import Console
 from datagit.storage import file as storage
+from datagit.storage import repo
 
 console = Console()
 app = typer.Typer()
@@ -16,13 +17,13 @@ def commit_command(
     """
     Commit staged changes in the DataGit repository.
     """
-    repo_path = Path(".datagit")
-    metadata_path = repo_path / "metadata.json"
-    commits_dir = repo_path / "commits"
-
-    if not repo_path.exists():
+    repo_path = repo.find_repo()
+    if not repo_path:
         console.print("[red]No DataGit repository found. Run 'datagit init' first.[/red]")
         raise typer.Exit(1)
+
+    metadata_path = repo_path / "metadata.json"
+    commits_dir = repo_path / "commits"
 
     # Load index (staged changes)
     index = storage.load_index(repo_path)

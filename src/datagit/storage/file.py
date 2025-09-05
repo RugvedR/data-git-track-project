@@ -13,7 +13,7 @@ def hash_file(file_path: Path) -> str:
             h.update(chunk)
     return h.hexdigest()
 
-def save_object(file_path: Path, file_hash: str, repo_path: Path):
+def save_object(file_path: Path, file_hash: str, repo_path: Path) -> Path:
     """
     Save a file into the .datagit/objects/ store using its hash.
     """
@@ -41,3 +41,14 @@ def save_index(repo_path: Path, index: dict):
     """
     index_path = repo_path / "index.json"
     index_path.write_text(json.dumps(index, indent=2))
+
+def build_index_entry(file_path: Path, file_hash: str) -> dict:
+    """
+    Create index entry with hash + basic metadata.
+    """
+    stat = file_path.stat()
+    return {
+        "hash": file_hash,
+        "size": stat.st_size,
+        "mtime": stat.st_mtime
+    }
