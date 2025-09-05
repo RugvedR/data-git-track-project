@@ -1,3 +1,4 @@
+# src/datagit/storage/file.py
 import hashlib
 import shutil
 import json
@@ -51,4 +52,15 @@ def build_index_entry(file_path: Path, file_hash: str) -> dict:
         "hash": file_hash,
         "size": stat.st_size,
         "mtime": stat.st_mtime
+    }
+
+def list_working_files(repo_root: Path) -> set[str]:
+    """
+    Return all file paths under repo_root (relative to repo_root),
+    excluding the .datagit directory.
+    """
+    return {
+        str(p.relative_to(repo_root))
+        for p in repo_root.rglob("*")
+        if p.is_file() and ".datagit" not in str(p)
     }
