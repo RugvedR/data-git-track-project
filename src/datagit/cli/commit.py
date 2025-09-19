@@ -1,76 +1,62 @@
-# # src/datagit/cli/commit.py
-# import typer
-# from pathlib import Path
-# import json
-# from datetime import datetime
-# from rich.console import Console
-# from datagit.storage import file as storage
-# from datagit.storage import repo
+import typer
+import json
+from pathlib import Path
+from datetime import datetime, timezone
+from rich.console import Console
 
-# console = Console()
-# app = typer.Typer()
+# Import our refactored storage modules
+from datagit.storage import repo as repo_utils
+from datagit.storage import core
+from datagit.storage import metadata
+from datagit.storage import repository
 
-# @app.command("commit")
-# def commit_command(
-#     message: str = typer.Option(..., "-m", "--message", help="Commit message")
-# ):
-#     """
-#     Commit staged changes in the DataGit repository.
-#     """
-#     repo_path = repo.find_repo()
-#     if not repo_path:
-#         console.print("[red]No DataGit repository found. Run 'datagit init' first.[/red]")
-#         raise typer.Exit(1)
+console = Console()
+app = typer.Typer()
 
-#     metadata_path = repo_path / "metadata.json"
-#     commits_dir = repo_path / "commits"
+@app.command("commit")
+def commit_command(
+    message: str = typer.Option(..., "-m", "--message", help="A brief message describing the changes.")
+):
+    """
+    Records the staged changes to the repository's permanent history.
+    """
+    repo_path = repo_utils.find_repo()
+    if not repo_path:
+        console.print("[red]No DataGit repository found. Run 'datagit init' first.[/red]")
+        raise typer.Exit(1)
 
-#     # Load index (staged changes)
-#     index = storage.load_index(repo_path)
-#     if not index:
-#         console.print("[yellow]Nothing staged. Use 'datagit add <file>' first.[/yellow]")
-#         raise typer.Exit(1)
+    # 1. Load the staging area (index)
+    index = metadata.load_index(repo_path)
+    if not index:
+        console.print("[yellow]Nothing to commit. Use 'datagit add <file>' to stage changes.[/yellow]")
+        raise typer.Exit(1)
 
-#     # Load metadata
-#     if metadata_path.exists():
-#         metadata = json.loads(metadata_path.read_text())
-#     else:
-#         metadata = {"HEAD": None, "branch": "main", "commits": []}
+    # 2. Create the Directory Recipe (the master blueprint for this commit)
+    # This recipe represents the complete state of all tracked files.
+    dir_recipe_data = {"files": index}
+    dir_recipe_content = json.dumps(dir_recipe_data, sort_keys=True).encode()
+    dir_recipe_hash = core.save_object(repo_path, dir_recipe_content, "recipes")
 
-#     commits_dir.mkdir(exist_ok=True)
+    # 3. Get the parent commit from HEAD to maintain the historical chain
+    meta = metadata.load_metadata(repo_path)
+    parent_commit_hash = meta.get("HEAD")
 
-#     # --- Check if changes exist compared to last commit ---
-#     if metadata["HEAD"]:
-#         head_commit_file = commits_dir / f"{metadata['HEAD']}.json"
-#         if head_commit_file.exists():
-#             head_commit = json.loads(head_commit_file.read_text())
-#             last_snapshot = head_commit.get("files", {})
+    # 4. Create the Manifest (the commit object)
+    timestamp = datetime.now(timezone.utc).isoformat()
+    manifest_data = {
+        "parent": parent_commit_hash,
+        "message": message,
+        "timestamp": timestamp,
+        "recipe": dir_recipe_hash  # Link to the master blueprint
+    }
+    manifest_content = json.dumps(manifest_data, sort_keys=True).encode()
+    new_commit_hash = core.save_object(repo_path, manifest_content, "manifests")
 
-#             if last_snapshot == index:
-#                 console.print("[green]Nothing to commit, working tree clean.[/green]")
-#                 return
+    # 5. Update HEAD to point to our new commit
+    meta["HEAD"] = new_commit_hash
+    metadata.save_metadata(repo_path, meta)
 
-#     # Generate commit ID
-#     commit_id = str(len(metadata["commits"]) + 1).zfill(4)  # e.g., "0001"
+    # 6. Clear the staging area for the next set of changes
+    metadata.clear_index(repo_path)
 
-#     commit_data = {
-#         "id": commit_id,
-#         "message": message,
-#         "files": index.copy(),  # snapshot of staged files
-#         "parent": metadata["HEAD"],
-#         "timestamp": datetime.utcnow().isoformat() + "Z",
-#     }
-
-#     # Save commit file
-#     commit_file = commits_dir / f"{commit_id}.json"
-#     commit_file.write_text(json.dumps(commit_data, indent=2))
-
-#     # Update metadata
-#     metadata["HEAD"] = commit_id
-#     metadata["commits"].append(commit_id)
-#     metadata_path.write_text(json.dumps(metadata, indent=2))
-
-#     # Clear staging (index.json)
-#     storage.save_index(repo_path, {})
-
-#     console.print(f"[green]Committed as {commit_id}: {message}[/green]")
+    console.print(f"[green]Committed changes as '{new_commit_hash[:8]}': {message}[/green]")
