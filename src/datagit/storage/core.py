@@ -46,14 +46,10 @@ def get_canonical_bytes_and_hash(series: pl.Series) -> Tuple[bytes, str]:
     hasher = hashlib.sha256()
     byte_parts = []
     
-    # Include the column's name and data type in the stream. This is critical for
-    # both deterministic hashing and for reconstruction during checkout.
     name_bytes = series.name.encode('utf-8')
     dtype_bytes = str(series.dtype).encode('utf-8')
     byte_parts.extend([name_bytes, dtype_bytes])
 
-    # DEFINITIVE FIX: Convert the Series to a simple list of primitives BEFORE hashing.
-    # This removes all dependency on the complex internal state of the Polars object.
     values_as_primitives = series.to_list()
 
     for value in values_as_primitives:
@@ -72,7 +68,6 @@ def get_canonical_bytes_and_hash(series: pl.Series) -> Tuple[bytes, str]:
     full_byte_stream = b'\x01'.join(byte_parts)
     content_hash = hashlib.sha256(full_byte_stream).hexdigest()
 
-    # The content we store is the same canonical byte stream we hash.
     return full_byte_stream, content_hash
 
 def save_chunk_if_needed(repo_path: Path, chunk_hash: str, chunk_content: bytes):
@@ -88,7 +83,7 @@ def save_chunk_if_needed(repo_path: Path, chunk_hash: str, chunk_content: bytes)
 # --- MERKLE TREE CONSTRUCTION (for `add`) ---
 
 def construct_merkle_tree_for_file(repo_path: Path, file_path: Path, relative_file_path: str) -> str:
-    # ... (This function remains unchanged as the fix is in the hashing primitive)
+    """The main engine for Phase 1, re-architected for perfect determinism."""
     console.rule(f"[bold blue]Constructing Merkle Tree for '{relative_file_path}'")
 
     schemas = metadata.load_schemas(repo_path)
@@ -107,9 +102,16 @@ def construct_merkle_tree_for_file(repo_path: Path, file_path: Path, relative_fi
     except Exception as e:
         raise IOError(f"Could not read or parse file: {file_path}. Error: {e}")
 
+    # --- FIX: Store the original column order ---
+    # We capture the exact column order from the DataFrame as it was read.
+    original_column_order = df.columns
+    
     console.log("[bold]Processing Columns[/bold]")
     column_recipes: List[Dict[str, str]] = []
     
+    # We still sort the columns before processing. This is critical to ensure
+    # the final file recipe hash is deterministic. The sort order here is
+    # ONLY for calculating the hash, not for storing the structure.
     for column_name in sorted(df.columns):
         column_chunk_hashes: List[str] = []
         for i in range(0, df.height, CHUNK_ROW_SIZE):
@@ -124,9 +126,13 @@ def construct_merkle_tree_for_file(repo_path: Path, file_path: Path, relative_fi
         
         column_recipes.append({"name": column_name, "recipe": col_recipe_hash})
 
+    # The list of columns for the recipe is also sorted to ensure a stable hash.
     sorted_column_recipes = sorted(column_recipes, key=lambda x: x['name'])
+    
     file_recipe_data = {
         "type": "columnar",
+        # --- FIX: Add the original, unsorted order to the recipe ---
+        "column_order": original_column_order,
         "columns": sorted_column_recipes
     }
     file_recipe_content = json.dumps(file_recipe_data, sort_keys=True).encode()
@@ -135,7 +141,7 @@ def construct_merkle_tree_for_file(repo_path: Path, file_path: Path, relative_fi
     console.rule(f"[bold green]Final File Recipe Hash: {file_recipe_hash}")
     return file_recipe_hash
 
-# --- DATA RECONSTRUCTION (for `checkout`) ---
+# --- DATA RECONSTRUCTION (for `checkout` / `activate`) ---
 
 def deserialize_chunk_from_storage(chunk_content: bytes) -> pl.Series:
     """
@@ -179,19 +185,21 @@ def reconstruct_file_from_recipe(repo_path: Path, repo_root: Path, file_path_str
                 column_chunks.append(chunk_series)
         
         if column_chunks:
-            # Concatenate all chunks for a single column together
             full_column = pl.concat(column_chunks)
             all_columns_data.append(full_column)
 
     if all_columns_data:
-        # Combine all reconstructed columns into a single DataFrame
         df = pl.DataFrame(all_columns_data)
+        
+        # --- FIX: Use the stored column order to reconstruct the file correctly ---
+        # We retrieve the original column order from the recipe.
+        original_order = file_recipe.get("column_order")
+        if original_order:
+            # Reorder the DataFrame columns to match the original file.
+            df = df.select(original_order)
+        
         output_path = repo_root / file_path_str
-        
-        # Ensure the parent directory exists before writing the file
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Write the final DataFrame to a CSV file in the user's working directory
         df.write_csv(output_path)
         console.log(f"  -> Reconstructed file [green]'{file_path_str}'[/green]")
 
@@ -203,9 +211,6 @@ def reconstruct_working_directory(repo_path: Path, dir_recipe: Dict[str, Any]):
     repo_root = repo_path.parent
     files_to_reconstruct = dir_recipe.get("files", {})
 
-    # Optional: Logic to delete files that are in the working dir but not in this commit
-    # For now, we will just overwrite/create files listed in the recipe.
-    
     console.log("[bold]Reconstructing files from commit...[/bold]")
     for file_path_str, file_recipe_hash in files_to_reconstruct.items():
         file_recipe = repository.get_recipe(repo_path, file_recipe_hash)

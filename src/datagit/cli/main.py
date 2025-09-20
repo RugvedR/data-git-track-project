@@ -1,16 +1,23 @@
-# src/datagit/cli/main.py
 import typer
-from datagit.cli import init, add, commit, log, status, checkout
+# Import the new and updated command modules
+from datagit.cli import init, add, commit, log, status, activate, view
 
-app = typer.Typer(help="DataGit - Git-like version control for datasets")
+app = typer.Typer(
+    help="DataGit - A novel, content-addressed version control system for datasets.",
+    rich_markup_mode="markdown"
+)
 
-# Register each command from other files
-app.add_typer(init.app, name="")   # top-level `datagit init`
-app.add_typer(add.app, name="")    # top-level `datagit add`
-app.add_typer(commit.app, name="") # top-level `datagit commit`
-app.add_typer(log.app, name="")    # top-level `datagit log`
-app.add_typer(checkout.app, name="")    # top-level `datagit log`
-# app.add_typer(status.app, name="") # top-level `datagit status`
+# Register each command module with the main application
+app.add_typer(init.app, name="")
+app.add_typer(add.app, name="")
+app.add_typer(commit.app, name="")
+app.add_typer(log.app, name="")
+# The new `activate` command replaces the old `checkout`
+app.add_typer(activate.app, name="")
+# The new `view` command for managing branches
+app.add_typer(view.app, name="")
+# app.add_typer(status.app, name="") # Status is not yet fully implemented for the new model
 
 def main():
+    """The main entry point for the DataGit CLI application."""
     app()
