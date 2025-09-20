@@ -34,3 +34,18 @@ def save_index(repo_path: Path, index: Dict[str, str]) -> None:
 def clear_index(repo_path: Path) -> None:
     """Clears the index by writing an empty JSON object."""
     save_index(repo_path, {})
+    
+# --- Schema Cache (schemas.json) ---
+
+def load_schemas(repo_path: Path) -> Dict[str, Any]:
+    """Loads the schema cache file (`schemas.json`)."""
+    schema_path = repo_path / "schemas.json"
+    if schema_path.exists():
+        return json.loads(schema_path.read_text())
+    return {}
+
+def save_schemas(repo_path: Path, schemas: Dict[str, Any]) -> None:
+    """Saves the schema cache file."""
+    schema_path = repo_path / "schemas.json"
+    schema_path.write_text(json.dumps(schemas, indent=2))
+

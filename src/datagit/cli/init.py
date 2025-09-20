@@ -35,4 +35,7 @@ def init_command():
     # Create an empty index file
     (repo_path / "index.json").write_text(json.dumps({}, indent=2))
 
+    # Create an empty schema cache file
+    (repo_path / "schemas.json").write_text(json.dumps({}, indent=2))
+
     console.print(f"[green]Initialized empty DataGit repository in {repo_path}/[/green]")
