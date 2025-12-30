@@ -6,7 +6,6 @@ from datetime import datetime
 
 # Import our refactored storage modules
 from datagit.storage import repo as repo_utils
-from datagit.storage import metadata
 from datagit.storage import repository
 
 console = Console()
@@ -15,29 +14,28 @@ app = typer.Typer()
 @app.command("log")
 def log_command():
     """
-    Displays the commit history of the repository.
+    Displays the commit history of the current active view.
     """
     repo_path = repo_utils.find_repo()
     if not repo_path:
         console.print("[red]No DataGit repository found. Run 'datagit init' first.[/red]")
         raise typer.Exit(1)
 
-    # 1. Get the current HEAD commit hash from metadata
-    meta = metadata.load_metadata(repo_path)
-    current_commit_hash = meta.get("HEAD")
+    # 1. Get the current view and its head commit hash using the new repository logic
+    current_view = repository.get_current_view_name(repo_path)
+    current_commit_hash = repository.get_head_commit(repo_path)
 
     if not current_commit_hash:
-        console.print("[yellow]No commits yet in this repository.[/yellow]")
+        console.print(f"[yellow]No commits yet on view '{current_view}'.[/yellow]")
         return
 
-    # 2. Prepare a table for rich display
-    table = Table(title="DataGit Commit History")
+    # 2. Prepare a table for rich display, showing the current view
+    table = Table(title=f"DataGit Commit History (view: {current_view})")
     table.add_column("Commit", style="cyan", no_wrap=True)
     table.add_column("Message", style="green")
     table.add_column("Timestamp", style="magenta")
 
-    # 3. Traverse the commit history from HEAD backwards
-    console.print("Reading commit history...")
+    # 3. Traverse the commit history from the view's HEAD backwards
     commit_count = 0
     while current_commit_hash:
         manifest = repository.get_manifest(repo_path, current_commit_hash)
@@ -46,18 +44,15 @@ def log_command():
             console.print(f"[bold red]Error: Corrupted history. Could not find commit '{current_commit_hash}'.[/bold red]")
             break
 
-        # Extract info for display
         message = manifest.get("message", "No commit message")
         timestamp_str = manifest.get("timestamp", "No timestamp")
         
-        # Safely parse and format the timestamp
         try:
             ts = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
             formatted_ts = ts.strftime("%Y-%m-%d %H:%M:%S %Z")
         except (ValueError, AttributeError):
             formatted_ts = timestamp_str
 
-        # Add row to the table
         table.add_row(current_commit_hash, message, formatted_ts)
         commit_count += 1
 
@@ -66,6 +61,4 @@ def log_command():
 
     if commit_count > 0:
         console.print(table)
-    else:
-        # This case should be caught by the initial check, but is a good safeguard
-        console.print("[yellow]No commits found.[/yellow]")
+
