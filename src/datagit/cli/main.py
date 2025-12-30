@@ -16,7 +16,7 @@ app.add_typer(log.app, name="")
 app.add_typer(activate.app, name="")
 # The new `view` command for managing branches
 app.add_typer(view.app, name="")
-# app.add_typer(status.app, name="") # Status is not yet fully implemented for the new model
+app.add_typer(status.app, name="") # Status is not yet fully implemented for the new model
 
 def main():
     """The main entry point for the DataGit CLI application."""
